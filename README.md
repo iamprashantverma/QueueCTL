@@ -22,14 +22,7 @@ A CLI-based background job queue system built using Spring Boot that manages job
 
 ### 1. Database Setup
 
-Create a MySQL database for the application:
-
-```sql
-CREATE DATABASE queuectl;
-CREATE USER 'queuectl_user'@'localhost' IDENTIFIED BY 'your_password';
-GRANT ALL PRIVILEGES ON queuectl.* TO 'queuectl_user'@'localhost';
-FLUSH PRIVILEGES;
-```
+Ensure you have a MySQL database named `queuectl` available for the application.
 
 ### 2. Configuration
 
@@ -58,53 +51,53 @@ Once the application is running, you can use the following commands in the inter
 ### Job Management
 
 ```bash
-# Submit a new job
-job submit --type "EMAIL_SEND" --payload "user@example.com"
+# Add a new job to the queue
+enqueue --command "echo 'Hello World'"
 
-# List all jobs
-job list
+# Show summary of all job states
+status
 
-# Get job details
-job status --id <job-id>
-
-# Cancel a job
-job cancel --id <job-id>
+# List jobs by state (PENDING, PROCESSING, COMPLETED, FAILED, DEAD)
+list --state PENDING
+list --state COMPLETED
+list --state FAILED
 ```
 
 ### Worker Management
 
 ```bash
-# Start workers
+# Start background workers (specify number of workers)
 worker start --count 3
 
-# Stop workers
+# Stop all running workers gracefully
 worker stop
-
-# Check worker status
-worker status
 ```
 
 ### Dead Letter Queue
 
 ```bash
-# List failed jobs in DLQ
+# View jobs in Dead Letter Queue
 dlq list
 
-# Retry a job from DLQ
-dlq retry --id <job-id>
-
-# Clear DLQ
-dlq clear
+# Retry a specific job from DLQ
+dlq retry --job-id <job-id>
 ```
 
 ### Configuration
 
 ```bash
-# View current configuration
-config show
+# View current configuration (all settings)
+config get
 
-# Update configuration
-config set --key "retry.max-attempts" --value "5"
+# View specific configuration
+config get --key max-retries
+config get --key backoff
+
+# Update maximum retry attempts
+config set --key max-retries --value 5
+
+# Update backoff time in seconds
+config set --key backoff --value 30
 ```
 
 ## Architecture
@@ -164,6 +157,3 @@ The executable JAR will be created in the `target/` directory.
 4. Add tests for new functionality
 5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
