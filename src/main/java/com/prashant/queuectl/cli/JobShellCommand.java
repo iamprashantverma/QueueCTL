@@ -1,7 +1,9 @@
 package com.prashant.queuectl.cli;
 
+import com.prashant.queuectl.config.AppConfig;
 import com.prashant.queuectl.dto.JobRequestDTO;
 import com.prashant.queuectl.dto.JobResponseDTO;
+import com.prashant.queuectl.dto.QueueOverviewDTO;
 import com.prashant.queuectl.entity.enums.State;
 import com.prashant.queuectl.service.JobService;
 import lombok.RequiredArgsConstructor;
@@ -18,26 +20,26 @@ import java.util.List;
 public class JobShellCommand {
 
     private final JobService jobService;
+    private final AppConfig appConfig;
 
-
-    private JobRequestDTO createJobRequestDto(String command, int maxRetries) {
+    private JobRequestDTO createJobRequestDto(String command) {
         return JobRequestDTO.builder()
                 .command(command)
                 .state(State.PENDING)
-                .maxRetries(maxRetries)
+                .maxRetries(appConfig.getMaxRetries())
                 .build();
     }
 
     @ShellMethod(key = "enqueue", value = "Add a new job to the queue")
-    public JobResponseDTO enqueue(@ShellOption(help = "Command to execute") String command, @ShellOption(defaultValue = "3", help = "Max retries") int maxRetries) {
+    public JobResponseDTO enqueue(@ShellOption(help = "Command to execute") String command) {
 
-        JobRequestDTO jobRequestDTO = createJobRequestDto(command, maxRetries);
+        JobRequestDTO jobRequestDTO = createJobRequestDto(command);
         return jobService.enqueueJob(jobRequestDTO);
     }
 
     @ShellMethod(key = "status", value = "Show summary of all job states")
-    public List<JobResponseDTO> status() {
-        return jobService.allJobs();
+    public QueueOverviewDTO status() {
+        return jobService.getQueueOverview();
     }
 
     @ShellMethod(key = "list", value = "List jobs by state")

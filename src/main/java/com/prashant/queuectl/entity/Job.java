@@ -24,11 +24,13 @@ public class Job {
     private String command;
 
     private Integer attempts = 0;
-    private Integer maxRetries = 3;
 
     @CreatedDate
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+    private LocalDateTime nextAttemptTime;
+
+
 }

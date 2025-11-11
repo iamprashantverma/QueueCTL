@@ -1,5 +1,6 @@
 package com.prashant.queuectl.service;
 
+import com.prashant.queuectl.config.AppConfig;
 import com.prashant.queuectl.entity.Job;
 import com.prashant.queuectl.entity.enums.State;
 import com.prashant.queuectl.repository.JobRepository;
@@ -11,7 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -19,28 +23,41 @@ import java.util.List;
 public class JobWorker {
 
     private final JobRepository jobRepository;
-    private final JobService jobService;
-
+    private final AppConfig appConfig;
     private volatile boolean running = true;
+
+    private final Set<String> activeWorkers = ConcurrentHashMap.newKeySet();
 
     @Async("jobExecutor")
     public void processJobs() {
-        log.info("Worker started: {}", Thread.currentThread().getName());
+        String workerName = Thread.currentThread().getName();
 
-        while (running) {
-            try {
-                processPendingJobs();
-            } catch (Exception e) {
-                log.error("Unexpected exception in worker thread", e);
-            }
+        if (!activeWorkers.add(workerName)) {
+            log.warn("Worker {} already running, skipping start.", workerName);
+            return;
+        }
 
-            try {
-                Thread.sleep(1000); // polling interval between job batches
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                running = false;
-                log.info("Worker interrupted, shutting down...");
+        log.info("Worker started: {}", workerName);
+
+        try {
+            while (running) {
+                try {
+                    processPendingJobs();
+                } catch (Exception e) {
+                    log.error("Unexpected exception in worker thread {}", workerName, e);
+                }
+
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    running = false;
+                    log.info("Worker {} interrupted, shutting down...", workerName);
+                }
             }
+        } finally {
+            activeWorkers.remove(workerName);
+            log.info("Worker {} stopped gracefully.", workerName);
         }
     }
 
@@ -49,6 +66,10 @@ public class JobWorker {
         List<Job> pendingJobs = jobRepository.findPendingJobsForUpdate(State.PENDING);
 
         for (Job job : pendingJobs) {
+            if (job.getNextAttemptTime() != null && job.getNextAttemptTime().isAfter(LocalDateTime.now())) {
+                continue;
+            }
+
             try {
                 executeJob(job);
             } catch (Exception e) {
@@ -57,9 +78,10 @@ public class JobWorker {
         }
     }
 
+    @Transactional
     private void executeJob(Job job) {
         job.setState(State.PROCESSING);
-        jobService.saveJob(job);
+        jobRepository.save(job);
 
         log.info("Executing job {}: {}", job.getId(), job.getCommand());
 
@@ -86,35 +108,37 @@ public class JobWorker {
             log.error("Job {} execution failed", job.getId(), e);
             handleFailure(job);
         } finally {
-            jobService.saveJob(job);
+            jobRepository.save(job);
         }
     }
 
-
+    @Transactional
     private void handleFailure(Job job) {
         job.setAttempts(job.getAttempts() + 1);
 
-        if (job.getAttempts() > job.getMaxRetries()) {
+        if (job.getAttempts() > appConfig.getMaxRetries()) {
             job.setState(State.DEAD);
             log.warn("Job {} moved to Dead Letter Queue", job.getId());
         } else {
-            job.setState(State.FAILED);
-            long delay = (long) Math.pow(2, job.getAttempts());
-            log.info("Job {} will retry after {} seconds", job.getId(), delay);
-
-            try {
-                Thread.sleep(delay * 1000);
-                job.setState(State.PENDING);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                running = false;
-                log.info("Worker interrupted during retry sleep...");
-            }
+            long delay = (long) Math.pow(appConfig.getBackoffSeconds(), job.getAttempts());
+            job.setNextAttemptTime(LocalDateTime.now().plusSeconds(delay));
+            job.setState(State.PENDING);
+            log.info("Job {} failed, will retry after {} seconds", job.getId(), delay);
         }
+
+        jobRepository.save(job);
     }
 
     public void shutdown() {
         running = false;
         log.info("Shutting down JobWorker gracefully...");
+    }
+
+    public boolean allWorkersStopped() {
+        return activeWorkers.isEmpty();
+    }
+
+    public int getActiveWorkerCount() {
+        return activeWorkers.size();
     }
 }

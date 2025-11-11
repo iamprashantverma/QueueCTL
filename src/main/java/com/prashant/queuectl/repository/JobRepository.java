@@ -19,4 +19,6 @@ public interface JobRepository extends JpaRepository<Job,Long> {
     List<Job> findPendingJobsForUpdate( State state);
 
     List<Job> findByState(State state);
+
+    long countByState(State state);
 }

@@ -12,6 +12,16 @@ import org.springframework.shell.jline.PromptProvider;
 @Configuration
 public class AppConfig {
 
+    private int maxRetries = 3;
+    private int backoffSeconds = 2;
+
+    public int getMaxRetries() {
+        return maxRetries;
+    }
+
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
 
     @Bean
     public ModelMapper getModelMapper(){
@@ -23,4 +33,11 @@ public class AppConfig {
         return () -> new AttributedString("queuectl:> ");
     }
 
+    public void setBackoffSeconds(int value) {
+        backoffSeconds = value;
+    }
+
+    public int getBackoffSeconds() {
+        return backoffSeconds;
+    }
 }
